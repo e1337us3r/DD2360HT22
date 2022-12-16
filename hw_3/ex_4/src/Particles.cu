@@ -513,7 +513,6 @@ int mover_PC_gpu(struct particles *part, struct EMfield *field, struct grid *grd
 
     cudaMemcpy(part, part_device, sizeof(particles), cudaMemcpyDeviceToHost);
 
-    //FPpart *part_x_host, *part_y_host, *part_z_host, *part_u_host, *part_v_host, *part_w_host;
     part->x = (FPpart *)malloc(part->npmax * sizeof(FPpart));
     part->y = (FPpart *)malloc(part->npmax * sizeof(FPpart));
     part->z = (FPpart *)malloc(part->npmax * sizeof(FPpart));
@@ -527,15 +526,6 @@ int mover_PC_gpu(struct particles *part, struct EMfield *field, struct grid *grd
     cudaMemcpy(part->u, part_u_device, part->npmax * sizeof(FPpart), cudaMemcpyDeviceToHost);
     cudaMemcpy(part->v, part_v_device, part->npmax * sizeof(FPpart), cudaMemcpyDeviceToHost);
     cudaMemcpy(part->w, part_w_device, part->npmax * sizeof(FPpart), cudaMemcpyDeviceToHost);
-
-    //particle_deallocate(part);
-
-    /*part->x = part_x_host;
-    part->y = part_y_host;
-    part->z = part_z_host;
-    part->u = part_u_host;
-    part->v = part_v_host;
-    part->w = part_w_host;*/
 
     cudaFree(part_device);
     cudaFree(field_device);
