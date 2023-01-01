@@ -57,8 +57,8 @@ int main(int argc, char **argv)
   int numBColumns; // number of columns in the matrix B
   int numCRows;
   int numCColumns;
-  Timer timer;
   Timer timerTotal;
+  Timer timer;
 
   //@@ Insert code below to read in numARows, numAColumns, numBColumns from args
 
@@ -82,9 +82,9 @@ int main(int argc, char **argv)
   //@@ Insert code below to allocate Host memory for input and output
 
   timer.start();
-  hostA = (DataType *)malloc(sizeof(DataType) * numARows * numAColumns);
-  hostB = (DataType *)malloc(sizeof(DataType) * numBRows * numBColumns);
-  hostC = (DataType *)malloc(sizeof(DataType) * numCRows * numCColumns);
+  cudaMallocHost((void**)&hostA,sizeof(DataType) * numARows * numAColumns);
+  cudaMallocHost((void**)&hostB,sizeof(DataType) * numBRows * numBColumns);
+  cudaMallocHost((void**)&hostC,sizeof(DataType) * numCRows * numCColumns);
   timer.stop("Memory allocation (Host)");
   resultRef = (DataType *)malloc(sizeof(DataType) * numCRows * numCColumns);
 
@@ -105,7 +105,6 @@ int main(int argc, char **argv)
   }
 
   timerTotal.start();
-
   timer.start();
   //@@ Insert code below to allocate GPU memory here
   cudaMalloc(&deviceA, sizeof(DataType) * numARows * numAColumns);
@@ -155,9 +154,9 @@ int main(int argc, char **argv)
   cudaFree(deviceC);
 
   //@@ Free the CPU memory here
-  free(hostA);
-  free(hostB);
-  free(hostC);
+  cudaFreeHost(hostA);
+  cudaFreeHost(hostB);
+  cudaFreeHost(hostC);
   free(resultRef);
 
   return 0;

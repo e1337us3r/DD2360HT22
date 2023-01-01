@@ -48,9 +48,6 @@ int main(int argc, char **argv)
   DataType *hostB;     // The B matrix
   DataType *hostC;     // The output C matrix
   DataType *resultRef; // The reference result
-  DataType *deviceA;
-  DataType *deviceB;
-  DataType *deviceC;
   int numARows;    // number of rows in the matrix A
   int numAColumns; // number of columns in the matrix A
   int numBRows;    // number of rows in the matrix B
@@ -58,7 +55,6 @@ int main(int argc, char **argv)
   int numCRows;
   int numCColumns;
   Timer timer;
-  Timer timerTotal;
 
   //@@ Insert code below to read in numARows, numAColumns, numBColumns from args
 
@@ -82,10 +78,10 @@ int main(int argc, char **argv)
   //@@ Insert code below to allocate Host memory for input and output
 
   timer.start();
-  hostA = (DataType *)malloc(sizeof(DataType) * numARows * numAColumns);
-  hostB = (DataType *)malloc(sizeof(DataType) * numBRows * numBColumns);
-  hostC = (DataType *)malloc(sizeof(DataType) * numCRows * numCColumns);
-  timer.stop("Memory allocation (Host)");
+  cudaMallocManaged(&hostA, sizeof(DataType) * numARows * numAColumns);
+  cudaMallocManaged(&hostB, sizeof(DataType) * numBRows * numBColumns);
+  cudaMallocManaged(&hostC, sizeof(DataType) * numCRows * numCColumns);
+  timer.stop("Memory allocation (Managed)");
   resultRef = (DataType *)malloc(sizeof(DataType) * numCRows * numCColumns);
 
   //@@ Insert code below to initialize hostA and hostB to random numbers, and create reference result in CPU
@@ -104,37 +100,16 @@ int main(int argc, char **argv)
     }
   }
 
-  timerTotal.start();
-
-  timer.start();
-  //@@ Insert code below to allocate GPU memory here
-  cudaMalloc(&deviceA, sizeof(DataType) * numARows * numAColumns);
-  cudaMalloc(&deviceB, sizeof(DataType) * numBRows * numBColumns);
-  cudaMalloc(&deviceC, sizeof(DataType) * numCRows * numCColumns);
-  timer.stop("Memory allocation (Device)");
-
-  //@@ Insert code to below to Copy memory to the GPU here
-  timer.start();
-  cudaMemcpy(deviceA, hostA, sizeof(DataType) * numARows * numAColumns, cudaMemcpyHostToDevice);
-  cudaMemcpy(deviceB, hostB, sizeof(DataType) * numBRows * numBColumns, cudaMemcpyHostToDevice);
-  timer.stop("Host to device copy");
-
   //@@ Initialize the grid and block dimensions here
   dim3 grid((numBColumns + TPB - 1) / TPB, (numARows + TPB - 1) / TPB);
   dim3 block(TPB, TPB);
 
   timer.start();
   //@@ Launch the GPU Kernel here
-  gemm<<<grid, block>>>(deviceA, deviceB, deviceC, numARows, numAColumns, numBRows, numBColumns);
+  gemm<<<grid, block>>>(hostA, hostB, hostC, numARows, numAColumns, numBRows, numBColumns);
 
   cudaDeviceSynchronize();
   timer.stop("kernel");
-
-  //@@ Copy the GPU memory back to the CPU here
-  timer.start();
-  cudaMemcpy(hostC, deviceC, sizeof(DataType) * numCRows * numCColumns, cudaMemcpyDeviceToHost);
-  timer.stop("Device to Host copy");
-  timerTotal.stop("Total runtime");
 
   //@@ Insert code below to compare the output with the reference
   float meanError = 0;
@@ -150,14 +125,11 @@ int main(int argc, char **argv)
   printf("Mean error is %f \n", meanError);
 
   //@@ Free the GPU memory here
-  cudaFree(deviceA);
-  cudaFree(deviceB);
-  cudaFree(deviceC);
+  cudaFree(hostA);
+  cudaFree(hostB);
+  cudaFree(hostC);
 
   //@@ Free the CPU memory here
-  free(hostA);
-  free(hostB);
-  free(hostC);
   free(resultRef);
 
   return 0;

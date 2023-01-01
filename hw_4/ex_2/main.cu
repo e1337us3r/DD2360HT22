@@ -19,9 +19,10 @@ __global__ void vecAdd(DataType *in1, DataType *in2, DataType *out, int len)
 
 int main(int argc, char **argv)
 {
-  srand ( time(NULL) );
+  srand(time(NULL));
 
   int inputLength;
+  int S_seg;
   DataType *hostInput1;
   DataType *hostInput2;
   DataType *hostOutput;
@@ -30,25 +31,37 @@ int main(int argc, char **argv)
   DataType *deviceInput2;
   DataType *deviceOutput;
   Timer timer;
-  Timer timerTotal;
 
   //@@ Insert code below to read in inputLength from args
 
-  if (argc != 2)
+  if (argc != 3)
   {
-    printf("Input length must be specified as the first argument.\n");
+    printf("Input lenght and segment size must be specified as the cli arguments.\n");
+    printf("Ex: run.o [inputLength] [S_seg].\n");
     exit(-1);
   }
 
   inputLength = atoi(argv[1]);
+  S_seg = atoi(argv[2]);
 
-  printf("The input length is %d\n", inputLength);
+  printf("The input length is %d, segment size is %d\n", inputLength, S_seg);
 
-  //@@ Insert code below to allocate Host memory for input and output
+  //@@ Create cuda streams
+  cudaStream_t streams[S_seg];
+  int streamSize = inputLength / S_seg;
+  int streamBytes = streamSize * sizeof(DataType);
 
-  hostInput1 = (double *)malloc(sizeof(DataType) * inputLength);
-  hostInput2 = (double *)malloc(sizeof(DataType) * inputLength);
-  hostOutput = (double *)malloc(sizeof(DataType) * inputLength);
+  for (size_t i = 0; i < S_seg; i++)
+  {
+    cudaStreamCreate(&streams[i]);
+  }
+
+  //@@ Insert code below to allocate PINNED Host memory for input and output
+
+  cudaHostAlloc((void **)&hostInput1, sizeof(DataType) * inputLength, cudaHostAllocDefault);
+  cudaHostAlloc((void **)&hostInput2, sizeof(DataType) * inputLength, cudaHostAllocDefault);
+  cudaHostAlloc((void **)&hostOutput, sizeof(DataType) * inputLength, cudaHostAllocDefault);
+
   resultRef = (double *)malloc(sizeof(DataType) * inputLength);
 
   //@@ Insert code below to initialize hostInput1 and hostInput2 to random numbers, and create reference result in CPU
@@ -68,27 +81,24 @@ int main(int argc, char **argv)
 
   //@@ Insert code to below to Copy memory to the GPU here
 
-  timerTotal.start();
   timer.start();
-  cudaMemcpy(deviceInput1, hostInput1, sizeof(DataType) * inputLength, cudaMemcpyHostToDevice);
-  cudaMemcpy(deviceInput2, hostInput2, sizeof(DataType) * inputLength, cudaMemcpyHostToDevice);
-  timer.stop("Host to device copy");
 
-  //@@ Initialize the 1D grid and block dimensions here
-  dim3 grid((inputLength + TPB - 1) / TPB, 1, 1);
-  dim3 block(TPB, 1, 1);
+  dim3 grid((streamSize + TPB - 1) / TPB);
+  dim3 block(TPB);
 
-  //@@ Launch the GPU Kernel here
-  timer.start();
-  vecAdd<<<grid, block>>>(deviceInput1, deviceInput2, deviceOutput, inputLength);
+  for (size_t i = 0; i < S_seg; i++)
+  {
+    int offset = streamSize * i;
+    cudaMemcpyAsync(&deviceInput1[offset], &hostInput1[offset], streamBytes, cudaMemcpyHostToDevice, streams[i]);
+    cudaMemcpyAsync(&deviceInput2[offset], &hostInput2[offset], streamBytes, cudaMemcpyHostToDevice, streams[i]);
+
+    vecAdd<<<grid, block, 0, streams[i]>>>(&deviceInput1[offset], &deviceInput2[offset], &deviceOutput[offset], streamSize);
+
+    cudaMemcpyAsync(&hostOutput[offset], &deviceOutput[offset], streamBytes, cudaMemcpyDeviceToHost, streams[i]);
+  }
 
   cudaDeviceSynchronize();
-  timer.stop("Kernel");
-  //@@ Copy the GPU memory back to the CPU here
-  timer.start();
-  cudaMemcpy(hostOutput, deviceOutput, sizeof(DataType) * inputLength, cudaMemcpyDeviceToHost);
-  timer.stop("Device to Host copy");
-  timerTotal.stop("Total runtime");
+  timer.stop("Total runtime");
 
   //@@ Insert code below to compare the output with the reference
   float meanError;
@@ -107,10 +117,15 @@ int main(int argc, char **argv)
   cudaFree(deviceInput2);
   cudaFree(deviceOutput);
 
+  for (size_t i = 0; i < S_seg; i++)
+  {
+    cudaStreamDestroy(streams[i]);
+  }
+
   //@@ Free the CPU memory here
-  free(hostInput1);
-  free(hostInput2);
-  free(hostOutput);
+  cudaFreeHost(hostInput1);
+  cudaFreeHost(hostInput2);
+  cudaFreeHost(hostOutput);
   free(resultRef);
 
   return 0;
